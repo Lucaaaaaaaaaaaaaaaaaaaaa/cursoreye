@@ -39,9 +39,9 @@ export default function Home() {
             <span className="gradient-hero"> hands</span>
           </h1>
 
-          <p className="text-xl text-[var(--text-secondary)] max-w-2xl mx-auto mb-10 leading-relaxed">
-            Not another chatbot. CursorEye watches your screen in real-time, understands what you&apos;re doing, and can take over your mouse & keyboard to finish the job. The first autonomous screen AI.
-          </p>
+        <p className="text-xl text-[var(--text-secondary)] max-w-2xl mx-auto mb-10 leading-relaxed">
+          Not another chatbot. CursorEye watches your screen, notices when you&apos;re stuck or repeating yourself, and gently offers to help — only when you want it. The first non-intrusive screen AI.
+        </p>
 
           <div className="flex flex-col sm:flex-row items-center justify-center gap-4 mb-16">
             <a href="/dashboard" className="px-8 py-4 rounded-xl bg-gradient-to-r from-[#6c5ce7] to-[#a855f7] text-white font-semibold text-lg glow-accent hover:opacity-90 transition-opacity">
@@ -69,7 +69,7 @@ export default function Home() {
                   </div>
                   <div>
                     <p className="text-sm font-medium text-[#6c5ce7]">CursorEye</p>
-                    <p className="text-sm text-[var(--text-secondary)] mt-1">I see you&apos;re filling out the same form 15 times. I can auto-fill the remaining 12 rows from your spreadsheet. Want me to take over?</p>
+                    <p className="text-sm text-[var(--text-secondary)] mt-1">Hey! I noticed you opened Figma. I&apos;m pretty good with design tools — want a hand?</p>
                   </div>
                 </div>
                 <div className="flex items-start gap-3">
@@ -78,7 +78,7 @@ export default function Home() {
                   </div>
                   <div>
                     <p className="text-sm font-medium text-[var(--success)]">You</p>
-                    <p className="text-sm text-[var(--text-secondary)] mt-1">Yes, do it</p>
+                    <p className="text-sm text-[var(--text-secondary)] mt-1">Yeah, export all icons as PNGs</p>
                   </div>
                 </div>
                 <div className="flex items-start gap-3">
@@ -87,7 +87,7 @@ export default function Home() {
                   </div>
                   <div>
                     <p className="text-sm font-medium text-[#6c5ce7]">CursorEye</p>
-                    <p className="text-sm text-[var(--text-secondary)] mt-1">Done. 12 rows filled in 8 seconds. I also noticed column C has inconsistent date formats — fix that too?</p>
+                    <p className="text-sm text-[var(--text-secondary)] mt-1">Done! 72 files exported in 5 seconds. I also noticed 3 icons have inconsistent padding — want me to fix those?</p>
                   </div>
                 </div>
                 <div className="flex items-center gap-2 pt-2 border-t border-[var(--border)]">
@@ -115,14 +115,14 @@ export default function Home() {
               },
               {
                 icon: <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5"><path d="M15 3h6v6M9 21H3v-6M21 3l-7 7M3 21l7-7" /></svg>,
-                title: "Acts Autonomously",
-                desc: "Controls your mouse, keyboard, and clipboard. Fills forms, copies data, navigates apps — with human-like movement patterns.",
+                title: "Acts When Asked",
+                desc: "Controls your mouse, keyboard, and clipboard. But only when you say so — no surprise takeovers. Fast, precise, human-like movements.",
                 tag: "Action",
               },
               {
                 icon: <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5"><path d="M12 2v4M12 18v4M4.93 4.93l2.83 2.83M16.24 16.24l2.83 2.83M2 12h4M18 12h4" /></svg>,
-                title: "Thinks Proactively",
-                desc: "Detects repetitive patterns, spots errors before you make them, suggests optimizations — it doesn't wait to be asked.",
+                title: "Gentle Suggestions",
+                desc: "Notices when you open an app and offers help — like a smart colleague, not a popup. You chat, it acts. Zero pressure.",
                 tag: "Intelligence",
               },
             ].map((f) => (
@@ -140,15 +140,15 @@ export default function Home() {
       <section className="py-24 px-6 bg-[var(--bg-secondary)]">
         <div className="max-w-6xl mx-auto">
           <h2 className="text-3xl sm:text-4xl font-bold text-center mb-4">What it can do — that ChatGPT can&apos;t</h2>
-          <p className="text-[var(--text-secondary)] text-center max-w-2xl mx-auto mb-16">These aren&apos;t prompts. These are actions.</p>
+          <p className="text-[var(--text-secondary)] text-center max-w-2xl mx-auto mb-16">It watches, it understands, it asks before it acts.</p>
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             {[
-              { title: "Auto-fill 100+ rows from a spreadsheet into a web form", time: "~8 seconds", icon: "📋" },
-              { title: "Watch your design tool and auto-export assets when you stop editing", time: "Real-time", icon: "🎨" },
-              { title: "Detect you're stuck in a menu and suggest the shortcut", time: "< 1 second", icon: "⚡" },
-              { title: "Auto-rename downloaded files based on content, not random hashes", time: "Instant", icon: "📂" },
-              { title: "Monitor your inbox and draft replies in your writing style", time: "Per email", icon: "✉️" },
-              { title: "Watch your terminal and interrupt before you run a destructive command", time: "Proactive", icon: "🛡️" },
+              { title: "Detect when you open an app and offer relevant help", time: "Instant", icon: "👁️" },
+              { title: "Export 24 Figma icons at 3 resolutions in 5 seconds", time: "~5 seconds", icon: "🎨" },
+              { title: "Fill 100+ form rows from clipboard when you ask", time: "~8 seconds", icon: "📋" },
+              { title: "Watch your terminal and warn before destructive commands", time: "Proactive", icon: "🛡️" },
+              { title: "Chat naturally — not just Q&A, but real conversation", time: "Always on", icon: "💬" },
+              { title: "Auto-rename downloaded files based on content", time: "Instant", icon: "📂" },
             ].map((item) => (
               <div key={item.title} className="flex items-start gap-4 p-5 rounded-xl bg-[var(--bg-card)] border border-[var(--border)] hover:border-[#6c5ce7]/30 transition-colors">
                 <span className="text-2xl">{item.icon}</span>

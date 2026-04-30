@@ -1,104 +1,285 @@
-import type { Metadata } from "next";
+"use client";
 
-export const metadata: Metadata = { title: "Dashboard — CursorEye" };
+import { useState, useRef, useEffect } from "react";
+
+interface Message {
+  id: string;
+  role: "ai" | "user" | "system";
+  content: string;
+  timestamp: Date;
+}
+
+interface DetectedApp {
+  name: string;
+  icon: string;
+  timestamp: Date;
+}
+
+const MOCK_CONVERSATION: Message[] = [
+  {
+    id: "1",
+    role: "ai",
+    content: "Hey! I noticed you opened Figma. I'm pretty good with design tools — I can auto-export assets, batch-rename layers, or help you find that one component buried in your file. Anything I can help with?",
+    timestamp: new Date(Date.now() - 300000),
+  },
+  {
+    id: "2",
+    role: "user",
+    content: "Yeah actually, can you export all the icons as PNGs?",
+    timestamp: new Date(Date.now() - 280000),
+  },
+  {
+    id: "3",
+    role: "ai",
+    content: "On it. I see 24 icon frames across 3 pages. Exporting at 1x, 2x, and 3x — that's 72 files. They'll land in your Downloads folder in about 5 seconds.",
+    timestamp: new Date(Date.now() - 270000),
+  },
+  {
+    id: "4",
+    role: "system",
+    content: "Exported 72 PNGs → ~/Downloads/figma-icons-export/",
+    timestamp: new Date(Date.now() - 265000),
+  },
+  {
+    id: "5",
+    role: "ai",
+    content: "Done! 72 files exported. I also noticed 3 icons have slightly different padding — want me to fix those too?",
+    timestamp: new Date(Date.now() - 260000),
+  },
+];
+
+const APP_SUGGESTIONS: Record<string, string[]> = {
+  Figma: ["Export assets", "Batch rename layers", "Find unused components", "Auto-layout cleanup"],
+  "Google Chrome": ["Fill forms from clipboard", "Auto-scroll and extract data", "Monitor page changes"],
+  Terminal: ["Auto-run repetitive commands", "Watch for error patterns", "Suggest command fixes"],
+  "VS Code": ["Batch refactor", "Find and fix lint errors", "Generate boilerplate"],
+  Slack: ["Draft replies", "Summarize unread channels", "Schedule messages"],
+  Excel: ["Auto-fill formulas", "Clean data formats", "Generate pivot tables"],
+  Notion: ["Auto-format pages", "Generate templates", "Link related docs"],
+};
 
 export default function Dashboard() {
+  const [messages, setMessages] = useState<Message[]>(MOCK_CONVERSATION);
+  const [input, setInput] = useState("");
+  const [detectedApp, setDetectedApp] = useState<DetectedApp | null>({
+    name: "Figma",
+    icon: "🎨",
+    timestamp: new Date(),
+  });
+  const [isTyping, setIsTyping] = useState(false);
+  const chatEndRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    chatEndRef.current?.scrollIntoView({ behavior: "smooth" });
+  }, [messages]);
+
+  const sendMessage = (text: string) => {
+    if (!text.trim()) return;
+    const userMsg: Message = {
+      id: Date.now().toString(),
+      role: "user",
+      content: text.trim(),
+      timestamp: new Date(),
+    };
+    setMessages((prev) => [...prev, userMsg]);
+    setInput("");
+    setIsTyping(true);
+
+    setTimeout(() => {
+      const aiMsg: Message = {
+        id: (Date.now() + 1).toString(),
+        role: "ai",
+        content: "Let me take a look at your screen... I can see what's going on. Give me a moment to figure out the best way to help.",
+        timestamp: new Date(),
+      };
+      setMessages((prev) => [...prev, aiMsg]);
+      setIsTyping(false);
+    }, 1500);
+  };
+
+  const quickActions = detectedApp
+    ? APP_SUGGESTIONS[detectedApp.name] || ["Take screenshot", "Read screen text", "Describe current view"]
+    : ["Take screenshot", "Read screen text", "Describe current view"];
+
   return (
-    <div className="min-h-screen bg-[var(--bg-primary)]">
-      <nav className="border-b border-[var(--border)] px-6 h-16 flex items-center justify-between">
+    <div className="min-h-screen bg-[var(--bg-primary)] flex flex-col">
+      <nav className="border-b border-[var(--border)] px-6 h-14 flex items-center justify-between flex-shrink-0">
         <div className="flex items-center gap-3">
           <div className="w-7 h-7 rounded-full bg-gradient-to-br from-[#6c5ce7] to-[#06b6d4] flex items-center justify-center">
             <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2.5"><circle cx="12" cy="12" r="3" /></svg>
           </div>
-          <span className="font-bold">CursorEye</span>
+          <span className="font-bold text-sm">CursorEye</span>
+          {detectedApp && (
+            <span className="flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-[var(--bg-card)] border border-[var(--border)] text-xs text-[var(--text-secondary)]">
+              {detectedApp.icon} {detectedApp.name}
+              <span className="w-1.5 h-1.5 rounded-full bg-[var(--success)]" />
+            </span>
+          )}
         </div>
         <div className="flex items-center gap-3">
-          <span className="px-3 py-1 rounded-full bg-[var(--success)]/10 text-[var(--success)] text-xs font-mono border border-[var(--success)]/20">Observer Plan</span>
-          <button className="px-4 py-2 rounded-lg bg-[#6c5ce7] text-sm font-medium hover:bg-[#5a4bd6] transition-colors">Upgrade</button>
+          <span className="px-2.5 py-1 rounded-full bg-[var(--success)]/10 text-[var(--success)] text-xs font-mono border border-[var(--success)]/20">Observer</span>
+          <button className="px-3 py-1.5 rounded-lg bg-[#6c5ce7] text-xs font-medium hover:bg-[#5a4bd6] transition-colors">Upgrade</button>
         </div>
       </nav>
 
-      <div className="max-w-7xl mx-auto px-6 py-8">
-        <div className="mb-8">
-          <h1 className="text-2xl font-bold mb-2">Your Screen Agent</h1>
-          <p className="text-[var(--text-secondary)]">Download the desktop agent to start. It watches your screen and executes actions on your command.</p>
+      <div className="flex flex-1 overflow-hidden">
+        <div className="flex-1 flex flex-col min-w-0">
+          <div className="flex-1 overflow-y-auto px-6 py-6 space-y-1">
+            {messages.map((msg) => (
+              <div
+                key={msg.id}
+                className={`flex gap-3 max-w-2xl ${msg.role === "user" ? "ml-auto flex-row-reverse" : "mr-auto"}`}
+              >
+                {msg.role !== "user" && (
+                  <div className={`w-7 h-7 rounded-full flex items-center justify-center flex-shrink-0 mt-1 ${
+                    msg.role === "ai" ? "bg-[#6c5ce7]/20" : "bg-[var(--bg-card)]"
+                  }`}>
+                    {msg.role === "ai" ? (
+                      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#6c5ce7" strokeWidth="2"><circle cx="12" cy="12" r="3" /></svg>
+                    ) : (
+                      <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="var(--text-secondary)" strokeWidth="2"><circle cx="12" cy="12" r="10" /><path d="M12 6v6l4 2" /></svg>
+                    )}
+                  </div>
+                )}
+                <div className={`px-4 py-3 rounded-2xl text-sm leading-relaxed ${
+                  msg.role === "user"
+                    ? "bg-[#6c5ce7] text-white rounded-br-md"
+                    : msg.role === "system"
+                    ? "bg-[var(--success)]/10 border border-[var(--success)]/20 text-[var(--success)] font-mono text-xs rounded-bl-md"
+                    : "bg-[var(--bg-card)] border border-[var(--border)] text-[var(--text-secondary)] rounded-bl-md"
+                }`}>
+                  {msg.content}
+                </div>
+              </div>
+            ))}
+            {isTyping && (
+              <div className="flex gap-3 max-w-2xl mr-auto">
+                <div className="w-7 h-7 rounded-full bg-[#6c5ce7]/20 flex items-center justify-center flex-shrink-0 mt-1">
+                  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#6c5ce7" strokeWidth="2"><circle cx="12" cy="12" r="3" /></svg>
+                </div>
+                <div className="px-4 py-3 rounded-2xl rounded-bl-md bg-[var(--bg-card)] border border-[var(--border)]">
+                  <div className="flex gap-1">
+                    <span className="w-2 h-2 rounded-full bg-[var(--text-secondary)] animate-bounce" style={{ animationDelay: "0ms" }} />
+                    <span className="w-2 h-2 rounded-full bg-[var(--text-secondary)] animate-bounce" style={{ animationDelay: "150ms" }} />
+                    <span className="w-2 h-2 rounded-full bg-[var(--text-secondary)] animate-bounce" style={{ animationDelay: "300ms" }} />
+                  </div>
+                </div>
+              </div>
+            )}
+            <div ref={chatEndRef} />
+          </div>
+
+          <div className="border-t border-[var(--border)] p-4">
+            {detectedApp && messages.length <= 1 && (
+              <div className="flex flex-wrap gap-2 mb-3">
+                {quickActions.slice(0, 4).map((action) => (
+                  <button
+                    key={action}
+                    onClick={() => sendMessage(action)}
+                    className="px-3 py-1.5 rounded-lg bg-[var(--bg-card)] border border-[var(--border)] text-xs text-[var(--text-secondary)] hover:text-white hover:border-[#6c5ce7]/50 transition-all"
+                  >
+                    {action}
+                  </button>
+                ))}
+              </div>
+            )}
+            <div className="flex gap-3">
+              <input
+                type="text"
+                value={input}
+                onChange={(e) => setInput(e.target.value)}
+                onKeyDown={(e) => e.key === "Enter" && sendMessage(input)}
+                placeholder={detectedApp ? `Ask about ${detectedApp.name}, or anything on your screen...` : "Ask me anything about your screen..."}
+                className="flex-1 px-4 py-3 rounded-xl bg-[var(--bg-card)] border border-[var(--border)] text-sm text-white placeholder:text-[var(--text-secondary)] focus:outline-none focus:border-[#6c5ce7]/50 transition-colors"
+              />
+              <button
+                onClick={() => sendMessage(input)}
+                className="px-5 py-3 rounded-xl bg-[#6c5ce7] hover:bg-[#5a4bd6] transition-colors flex items-center gap-2 text-sm font-medium"
+              >
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M22 2L11 13M22 2l-7 20-4-9-9-4 20-7z" /></svg>
+              </button>
+            </div>
+          </div>
         </div>
 
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-8">
-          <div className="lg:col-span-2 bg-[var(--bg-card)] rounded-2xl border border-[var(--border)] p-6">
-            <h2 className="text-lg font-semibold mb-4 flex items-center gap-2">
+        <div className="w-72 border-l border-[var(--border)] flex-shrink-0 overflow-y-auto p-4 space-y-4 hidden lg:block">
+          <div className="rounded-xl bg-[var(--bg-card)] border border-[var(--border)] p-4">
+            <h3 className="text-xs font-medium text-[var(--text-secondary)] mb-3 flex items-center gap-2">
               <span className="w-2 h-2 rounded-full bg-[var(--success)] pulse-dot" />
-              Live Screen Feed
-            </h2>
-            <div className="aspect-video rounded-xl bg-[var(--bg-primary)] border border-[var(--border)] flex items-center justify-center relative overflow-hidden">
+              Live Screen
+            </h3>
+            <div className="aspect-video rounded-lg bg-[var(--bg-primary)] border border-[var(--border)] flex items-center justify-center relative overflow-hidden">
               <div className="text-center">
-                <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="var(--text-secondary)" strokeWidth="1" className="mx-auto mb-3 opacity-30"><rect x="2" y="3" width="20" height="14" rx="2" /><line x1="8" y1="21" x2="16" y2="21" /><line x1="12" y1="17" x2="12" y2="21" /></svg>
-                <p className="text-[var(--text-secondary)] text-sm mb-1">No agent connected</p>
-                <p className="text-[var(--text-secondary)] text-xs">Install the desktop agent to start screen sharing</p>
+                <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="var(--text-secondary)" strokeWidth="1" className="mx-auto mb-2 opacity-30"><rect x="2" y="3" width="20" height="14" rx="2" /><line x1="8" y1="21" x2="16" y2="21" /><line x1="12" y1="17" x2="12" y2="21" /></svg>
+                <p className="text-[var(--text-secondary)] text-[10px]">Agent offline</p>
               </div>
               <div className="absolute inset-0 pointer-events-none scan-line opacity-5">
                 <div className="w-full h-px bg-[#6c5ce7]" />
               </div>
             </div>
+            <p className="text-[10px] text-[var(--text-secondary)] mt-2 font-mono text-center">0.3s latency • 30fps capture</p>
           </div>
 
-          <div className="space-y-6">
-            <div className="bg-[var(--bg-card)] rounded-2xl border border-[var(--border)] p-6">
-              <h3 className="text-sm font-medium text-[var(--text-secondary)] mb-4">Today&apos;s Stats</h3>
-              <div className="space-y-4">
-                {[
-                  { label: "Actions Taken", value: "0", max: "5" },
-                  { label: "Screen Captures", value: "0", max: "∞" },
-                  { label: "Time Saved", value: "0m", max: "" },
-                ].map((s) => (
-                  <div key={s.label}>
-                    <div className="flex justify-between text-sm mb-1">
-                      <span className="text-[var(--text-secondary)]">{s.label}</span>
-                      <span className="font-mono">{s.value}{s.max && <span className="text-[var(--text-secondary)]">/{s.max}</span>}</span>
-                    </div>
-                    {s.max && <div className="h-1.5 rounded-full bg-[var(--bg-primary)] overflow-hidden"><div className="h-full rounded-full bg-gradient-to-r from-[#6c5ce7] to-[#06b6d4]" style={{ width: "0%" }} /></div>}
+          <div className="rounded-xl bg-[var(--bg-card)] border border-[var(--border)] p-4">
+            <h3 className="text-xs font-medium text-[var(--text-secondary)] mb-3">Stats Today</h3>
+            <div className="space-y-3">
+              {[
+                { label: "Actions", value: "1", max: "5" },
+                { label: "Screenshots", value: "47", max: "" },
+                { label: "Time saved", value: "12m", max: "" },
+                { label: "Apps detected", value: "3", max: "" },
+              ].map((s) => (
+                <div key={s.label}>
+                  <div className="flex justify-between text-xs mb-1">
+                    <span className="text-[var(--text-secondary)]">{s.label}</span>
+                    <span className="font-mono text-white">
+                      {s.value}
+                      {s.max && <span className="text-[var(--text-secondary)]">/{s.max}</span>}
+                    </span>
                   </div>
-                ))}
-              </div>
-            </div>
-
-            <div className="bg-[var(--bg-card)] rounded-2xl border border-[var(--border)] p-6">
-              <h3 className="text-sm font-medium text-[var(--text-secondary)] mb-4">Quick Actions</h3>
-              <div className="space-y-2">
-                {["Fill form from clipboard", "Auto-click repeated pattern", "Watch for errors"].map((a) => (
-                  <button key={a} className="w-full text-left px-3 py-2 rounded-lg bg-[var(--bg-primary)] border border-[var(--border)] text-sm hover:border-[#6c5ce7]/50 transition-colors text-[var(--text-secondary)] hover:text-white">
-                    {a}
-                  </button>
-                ))}
-              </div>
+                  {s.max && (
+                    <div className="h-1 rounded-full bg-[var(--bg-primary)] overflow-hidden">
+                      <div
+                        className="h-full rounded-full bg-gradient-to-r from-[#6c5ce7] to-[#06b6d4]"
+                        style={{ width: `${(parseInt(s.value) / parseInt(s.max)) * 100}%` }}
+                      />
+                    </div>
+                  )}
+                </div>
+              ))}
             </div>
           </div>
-        </div>
 
-        <div className="bg-[var(--bg-card)] rounded-2xl border border-[var(--border)] p-6">
-          <h2 className="text-lg font-semibold mb-4">Install Desktop Agent</h2>
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-            <button className="flex items-center gap-3 p-4 rounded-xl bg-[var(--bg-primary)] border border-[var(--border)] hover:border-[#6c5ce7]/50 transition-colors">
-              <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor" className="text-[var(--text-secondary)]"><path d="M18.71 19.5c-.83 1.24-1.71 2.45-3.05 2.47-1.34.03-1.77-.79-3.29-.79-1.53 0-2 .77-3.27.82-1.31.05-2.3-1.32-3.14-2.53C4.25 17 2.94 12.45 4.7 9.39c.87-1.52 2.43-2.48 4.12-2.51 1.28-.02 2.5.87 3.29.87.78 0 2.26-1.07 3.8-.91.65.03 2.47.26 3.64 1.98-.09.06-2.17 1.28-2.15 3.81.03 3.02 2.65 4.03 2.68 4.04-.03.07-.42 1.44-1.38 2.83M13 3.5c.73-.83 1.94-1.46 2.94-1.5.13 1.17-.34 2.35-1.04 3.19-.69.85-1.83 1.51-2.95 1.42-.15-1.15.41-2.35 1.05-3.11z" /></svg>
-              <div>
-                <p className="text-sm font-medium">macOS</p>
-                <p className="text-xs text-[var(--text-secondary)]">Apple Silicon & Intel</p>
-              </div>
-            </button>
-            <button className="flex items-center gap-3 p-4 rounded-xl bg-[var(--bg-primary)] border border-[var(--border)] hover:border-[#6c5ce7]/50 transition-colors opacity-50">
-              <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor" className="text-[var(--text-secondary)]"><path d="M3 12V6.75l6-1.32v6.48L3 12zm17-9v8.75l-10 .08V5.21L20 3zM3 13l6 .09v6.81l-6-1.15V13zm7 .18L20 13v8.5l-10-1.91V13.18z" /></svg>
-              <div>
-                <p className="text-sm font-medium">Windows</p>
-                <p className="text-xs text-[var(--text-secondary)]">Coming soon</p>
-              </div>
-            </button>
-            <button className="flex items-center gap-3 p-4 rounded-xl bg-[var(--bg-primary)] border border-[var(--border)] hover:border-[#6c5ce7]/50 transition-colors opacity-50">
-              <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor" className="text-[var(--text-secondary)]"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm0 18c-4.42 0-8-3.58-8-8s3.58-8 8-8 8 3.58 8 8-3.58 8-8 8z" /></svg>
-              <div>
-                <p className="text-sm font-medium">Linux</p>
-                <p className="text-xs text-[var(--text-secondary)]">Coming soon</p>
-              </div>
-            </button>
+          <div className="rounded-xl bg-[var(--bg-card)] border border-[var(--border)] p-4">
+            <h3 className="text-xs font-medium text-[var(--text-secondary)] mb-3">Quick Actions</h3>
+            <div className="space-y-1.5">
+              {quickActions.map((action) => (
+                <button
+                  key={action}
+                  onClick={() => sendMessage(action)}
+                  className="w-full text-left px-3 py-2 rounded-lg bg-[var(--bg-primary)] border border-[var(--border)] text-xs hover:border-[#6c5ce7]/50 hover:text-white transition-colors text-[var(--text-secondary)]"
+                >
+                  {action}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          <div className="rounded-xl bg-[var(--bg-card)] border border-[var(--border)] p-4">
+            <h3 className="text-xs font-medium text-[var(--text-secondary)] mb-3">App History</h3>
+            <div className="space-y-2">
+              {[
+                { name: "Figma", icon: "🎨", time: "Now" },
+                { name: "Chrome", icon: "🌐", time: "2m ago" },
+                { name: "Terminal", icon: "⬛", time: "8m ago" },
+              ].map((app) => (
+                <div key={app.name} className="flex items-center gap-2 text-xs">
+                  <span>{app.icon}</span>
+                  <span className="text-white flex-1">{app.name}</span>
+                  <span className="text-[var(--text-secondary)] font-mono">{app.time}</span>
+                </div>
+              ))}
+            </div>
           </div>
         </div>
       </div>
