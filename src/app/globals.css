@@ -1,0 +1,81 @@
+@import "tailwindcss";
+
+:root {
+  --bg-primary: #0a0a0f;
+  --bg-secondary: #12121a;
+  --bg-card: #1a1a28;
+  --border: #2a2a3a;
+  --text-primary: #f0f0f5;
+  --text-secondary: #8888a0;
+  --accent: #6c5ce7;
+  --accent-glow: rgba(108, 92, 231, 0.3);
+  --success: #00d2a0;
+  --warning: #ffb347;
+  --danger: #ff6b6b;
+}
+
+@theme inline {
+  --color-background: var(--bg-primary);
+  --color-foreground: var(--text-primary);
+  --font-sans: var(--font-geist-sans);
+  --font-mono: var(--font-geist-mono);
+}
+
+body {
+  background: var(--bg-primary);
+  color: var(--text-primary);
+}
+
+.glow-accent {
+  box-shadow: 0 0 60px var(--accent-glow), 0 0 120px rgba(108, 92, 231, 0.1);
+}
+
+.gradient-hero {
+  background: linear-gradient(135deg, #6c5ce7 0%, #a855f7 50%, #06b6d4 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
+
+.gradient-border {
+  border: 1px solid transparent;
+  background-origin: border-box;
+  background-clip: padding-box, border-box;
+  background-image: linear-gradient(var(--bg-card), var(--bg-card)), linear-gradient(135deg, #6c5ce7, #06b6d4);
+}
+
+.card-hover {
+  transition: all 0.3s ease;
+}
+.card-hover:hover {
+  transform: translateY(-4px);
+  box-shadow: 0 0 40px var(--accent-glow);
+}
+
+.pulse-dot {
+  animation: pulse 2s infinite;
+}
+@keyframes pulse {
+  0%, 100% { opacity: 1; transform: scale(1); }
+  50% { opacity: 0.5; transform: scale(1.5); }
+}
+
+.scan-line {
+  animation: scan 3s linear infinite;
+}
+@keyframes scan {
+  0% { transform: translateY(-100%); }
+  100% { transform: translateY(100vh); }
+}
+
+.typing-cursor::after {
+  content: "|";
+  animation: blink 1s step-end infinite;
+}
+@keyframes blink {
+  50% { opacity: 0; }
+}
+
+.screen-glow {
+  box-shadow: 0 0 80px rgba(108, 92, 231, 0.2), inset 0 0 80px rgba(108, 92, 231, 0.05);
+}
