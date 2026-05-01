@@ -158,6 +158,7 @@ Screen summary: ${screenContext.description.slice(0, 500)}
 
 ### Worker Window (YOUR OWN COMPUTER — separate macOS Terminal window):
 The Worker window is YOUR dedicated workspace. It stays open even when the user is in a game or another app.
+You have your own **purple cursor** that shows where you're clicking — the user's real cursor is NOT moved.
 - **open_worker**: Open your dedicated worker Terminal window. Params: {title: "optional custom title"}
 - **worker_type**: Type text into your worker window (does NOT interfere with user's keyboard). Params: {text}
 - **worker_shortcut**: Send keyboard shortcut to your worker window (does NOT interfere with user's keyboard). Params: {modifiers: ["cmd"], key: "c"}
@@ -165,6 +166,17 @@ The Worker window is YOUR dedicated workspace. It stays open even when the user 
 - **worker_run_wait**: Execute a shell command, wait for output, then OCR your window to read the result. Params: {command: "ls -la", wait_seconds: 3}
 - **screenshot_worker**: See what's in your worker window right now (screenshot)
 - **ocr_worker**: Read the text currently displayed in your worker window
+
+### Worker Mouse Control (YOUR PURPLE CURSOR — does NOT move user's cursor):
+These click within the Worker window using AppleScript Accessibility API. A purple dot overlay shows where you clicked.
+Coordinates are PERCENTAGES of the Worker window (0-100). x=0 is left, x=100 is right. y=0 is top, y=100 is bottom.
+- **worker_click**: Click at position in your worker window. Params: {x: 50, y: 50, button: "left"|"right", count: 1}
+- **worker_double_click**: Double click in worker window. Params: {x: 50, y: 50}
+- **worker_right_click**: Right click in worker window. Params: {x: 50, y: 50}
+- **worker_drag**: Drag from A to B in worker window. Params: {x1, y1, x2, y2, duration: 0.5}
+- **worker_scroll**: Scroll in worker window. Params: {x: 50, y: 50, amount: 3, direction: "up"|"down"}
+- **worker_move_cursor**: Move your purple cursor to a position (no click, just visual). Params: {x: 50, y: 50}
+- **worker_hide_cursor**: Hide the purple cursor overlay. No params.
 
 ### File Generation (creates actual downloadable files, NOT just text in chat):
 - **generate_file**: Create a real file on Desktop. Params: {file_type: "docx"|"pdf"|"txt"|"md"|"html"|"csv", content: "file content here", filename: "optional name.docx"}
@@ -180,9 +192,11 @@ The Worker window is YOUR dedicated workspace. It stays open even when the user 
 2. After clicking/typing → use verify or ocr to confirm it worked
 3. Worker window is YOUR OWN COMPUTER — use it for long operations, coding, running scripts. User can be in a game or other app, you work independently in your worker window
 4. After running commands in worker window → use ocr_worker or worker_run_wait to read the output and see what happened
-5. Coordinates are ALWAYS percentages (0-100) of screen dimensions
+5. Coordinates are ALWAYS percentages (0-100) of screen/window dimensions
 6. If unsure about screen state, take a screenshot or OCR first
 7. You have TWO sets of eyes: screenshot/ocr for the USER's screen, screenshot_worker/ocr_worker for YOUR OWN workspace
+8. Your PURPLE CURSOR is separate from the user's mouse — you can click in the Worker window without moving the user's cursor. Use worker_click instead of click when working in your own workspace
+9. When clicking in your Worker window, use worker_click (with purple cursor). When clicking on the user's screen, use click (moves system cursor)
 
 Respond in JSON:
 {

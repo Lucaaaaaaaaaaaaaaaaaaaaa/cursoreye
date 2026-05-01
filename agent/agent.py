@@ -12,9 +12,11 @@ import sys
 import tempfile
 import websockets
 
-AGENT_VERSION = "2.0.0"
+AGENT_VERSION = "2.1.0"
 DEFAULT_WS_URL = "ws://localhost:8765"
 WORKER_WINDOW_TITLE = "🔴 CursorEye Worker"
+PURPLE_CURSOR_PID_FILE = os.path.expanduser("~/.cursoreye/purple_cursor.pid")
+PURPLE_CURSOR_POS_FILE = os.path.expanduser("~/.cursoreye/purple_cursor_pos.json")
 
 # ─── Screenshot ───────────────────────────────────────────────────────────
 
@@ -487,6 +489,223 @@ def run_in_worker_and_wait(command, wait_seconds=3):
     }
 
 
+# ─── AI Purple Cursor ──────────────────────────────────────────────────────
+
+
+def _start_purple_cursor_overlay():
+    """Launch the purple cursor overlay as a background process."""
+    if os.path.exists(PURPLE_CURSOR_PID_FILE):
+        try:
+            with open(PURPLE_CURSOR_PID_FILE) as f:
+                pid = int(f.read().strip())
+            os.kill(pid, 0)
+            return pid
+        except (ProcessLookupError, ValueError, FileNotFoundError):
+            pass
+
+    cursor_script = os.path.join(
+        os.path.dirname(os.path.abspath(__file__)), "_purple_cursor.py"
+    )
+    if not os.path.exists(cursor_script):
+        return None
+
+    proc = subprocess.Popen(
+        ["python3", cursor_script],
+        stdout=subprocess.DEVNULL,
+        stderr=subprocess.DEVNULL,
+    )
+    with open(PURPLE_CURSOR_PID_FILE, "w") as f:
+        f.write(str(proc.pid))
+    return proc.pid
+
+
+def _stop_purple_cursor_overlay():
+    """Stop the purple cursor overlay process."""
+    if os.path.exists(PURPLE_CURSOR_PID_FILE):
+        try:
+            with open(PURPLE_CURSOR_PID_FILE) as f:
+                pid = int(f.read().strip())
+            os.kill(pid, 9)
+        except (ProcessLookupError, ValueError, FileNotFoundError):
+            pass
+        try:
+            os.unlink(PURPLE_CURSOR_PID_FILE)
+        except OSError:
+            pass
+
+
+def worker_click(x_pct, y_pct, button="left", click_count=1):
+    """Click at percentage position within the Worker window using AppleScript.
+    Uses Accessibility API click — does NOT move the system cursor.
+    Shows purple cursor overlay at click position."""
+    bounds = get_worker_window_bounds()
+    if not bounds:
+        return {
+            "success": False,
+            "error": "Worker window not found. Open it first with open_worker.",
+        }
+
+    abs_x = int(bounds["x"] + (x_pct / 100) * bounds["w"])
+    abs_y = int(bounds["y"] + (y_pct / 100) * bounds["h"])
+
+    _save_cursor_pos(x_pct, y_pct)
+    _save_worker_bounds(bounds)
+    _start_purple_cursor_overlay()
+
+    import time
+
+    time.sleep(0.15)
+
+    btn_map = {"left": "", "right": "right", "center": "center"}
+    btn_str = btn_map.get(button, "")
+    click_cmd = "click at"
+    if click_count == 2:
+        click_cmd = "double click at"
+    elif click_count == 3:
+        click_cmd = "triple click at"
+
+    escaped_btn = f" using {{{btn_str} down}}" if btn_str else ""
+    scpt = tempfile.NamedTemporaryFile(suffix=".scpt", delete=False, mode="w")
+    scpt.write(f"""
+on run
+tell application "System Events"
+set p to first process whose name is "Terminal"
+set w to first window of p whose name contains "CursorEye Worker"
+set focused of w to true
+set index of w to 1
+delay 0.1
+{click_cmd} {{{abs_x}, {abs_y}}}
+end tell
+end run
+""")
+    scpt.close()
+    result = subprocess.run(["osascript", scpt.name], capture_output=True, text=True)
+    os.unlink(scpt.name)
+    return {
+        "success": result.returncode == 0,
+        "action": "worker_click",
+        "x_pct": x_pct,
+        "y_pct": y_pct,
+        "abs_x": abs_x,
+        "abs_y": abs_y,
+        "error": result.stderr[:200] if result.returncode != 0 else None,
+    }
+
+
+def worker_drag(x1_pct, y1_pct, x2_pct, y2_pct, duration=0.5):
+    """Drag from one position to another within the Worker window."""
+    bounds = get_worker_window_bounds()
+    if not bounds:
+        return {"success": False, "error": "Worker window not found."}
+
+    abs_x1 = int(bounds["x"] + (x1_pct / 100) * bounds["w"])
+    abs_y1 = int(bounds["y"] + (y1_pct / 100) * bounds["h"])
+    abs_x2 = int(bounds["x"] + (x2_pct / 100) * bounds["w"])
+    abs_y2 = int(bounds["y"] + (y2_pct / 100) * bounds["h"])
+
+    _save_cursor_pos(x2_pct, y2_pct)
+    _save_worker_bounds(bounds)
+    _start_purple_cursor_overlay()
+
+    scpt = tempfile.NamedTemporaryFile(suffix=".scpt", delete=False, mode="w")
+    scpt.write(f"""
+on run
+tell application "System Events"
+set p to first process whose name is "Terminal"
+set w to first window of p whose name contains "CursorEye Worker"
+set focused of w to true
+set index of w to 1
+delay 0.1
+drag from {{{abs_x1}, {abs_y1}}} to {{{abs_x2}, {abs_y2}}}
+end tell
+end run
+""")
+    scpt.close()
+    result = subprocess.run(["osascript", scpt.name], capture_output=True, text=True)
+    os.unlink(scpt.name)
+    return {
+        "success": result.returncode == 0,
+        "action": "worker_drag",
+        "x1_pct": x1_pct,
+        "y1_pct": y1_pct,
+        "x2_pct": x2_pct,
+        "y2_pct": y2_pct,
+    }
+
+
+def worker_scroll(x_pct, y_pct, amount, direction="down"):
+    """Scroll within the Worker window at a given position."""
+    bounds = get_worker_window_bounds()
+    if not bounds:
+        return {"success": False, "error": "Worker window not found."}
+
+    abs_x = int(bounds["x"] + (x_pct / 100) * bounds["w"])
+    abs_y = int(bounds["y"] + (y_pct / 100) * bounds["h"])
+
+    scroll_cmd = "scroll down" if direction == "down" else "scroll up"
+
+    scpt = tempfile.NamedTemporaryFile(suffix=".scpt", delete=False, mode="w")
+    scpt.write(f"""
+on run
+tell application "System Events"
+set p to first process whose name is "Terminal"
+set w to first window of p whose name contains "CursorEye Worker"
+set focused of w to true
+set index of w to 1
+delay 0.1
+{scroll_cmd} {amount} at {{{abs_x}, {abs_y}}}
+end tell
+end run
+""")
+    scpt.close()
+    result = subprocess.run(["osascript", scpt.name], capture_output=True, text=True)
+    os.unlink(scpt.name)
+    return {
+        "success": result.returncode == 0,
+        "action": "worker_scroll",
+        "amount": amount,
+        "direction": direction,
+    }
+
+
+def worker_move_cursor(x_pct, y_pct):
+    """Move the purple cursor overlay to a position within the Worker window (no click)."""
+    bounds = get_worker_window_bounds()
+    if not bounds:
+        return {"success": False, "error": "Worker window not found."}
+
+    _save_cursor_pos(x_pct, y_pct)
+    _save_worker_bounds(bounds)
+    _start_purple_cursor_overlay()
+    return {
+        "success": True,
+        "action": "worker_move_cursor",
+        "x_pct": x_pct,
+        "y_pct": y_pct,
+    }
+
+
+def worker_hide_cursor():
+    """Hide the purple cursor overlay."""
+    _stop_purple_cursor_overlay()
+    return {"success": True, "action": "worker_hide_cursor"}
+
+
+def _save_cursor_pos(x_pct, y_pct):
+    """Save cursor position to shared file for overlay process."""
+    os.makedirs(os.path.dirname(PURPLE_CURSOR_POS_FILE), exist_ok=True)
+    with open(PURPLE_CURSOR_POS_FILE, "w") as f:
+        json.dump({"x_pct": x_pct, "y_pct": y_pct}, f)
+
+
+def _save_worker_bounds(bounds):
+    """Save worker window bounds to shared file for overlay process."""
+    bounds_file = os.path.expanduser("~/.cursoreye/worker_bounds.json")
+    os.makedirs(os.path.dirname(bounds_file), exist_ok=True)
+    with open(bounds_file, "w") as f:
+        json.dump(bounds, f)
+
+
 # ─── File Generation ────────────────────────────────────────────────────────
 
 
@@ -716,6 +935,56 @@ def execute_command(cmd):
         elif action == "ocr_worker":
             return ocr_worker()
 
+        elif action == "worker_click":
+            return worker_click(
+                params.get("x", 50),
+                params.get("y", 50),
+                params.get("button", "left"),
+                params.get("count", 1),
+            )
+
+        elif action == "worker_double_click":
+            return worker_click(
+                params.get("x", 50),
+                params.get("y", 50),
+                "left",
+                2,
+            )
+
+        elif action == "worker_right_click":
+            return worker_click(
+                params.get("x", 50),
+                params.get("y", 50),
+                "right",
+                1,
+            )
+
+        elif action == "worker_drag":
+            return worker_drag(
+                params.get("x1", 0),
+                params.get("y1", 0),
+                params.get("x2", 0),
+                params.get("y2", 0),
+                params.get("duration", 0.5),
+            )
+
+        elif action == "worker_scroll":
+            return worker_scroll(
+                params.get("x", 50),
+                params.get("y", 50),
+                params.get("amount", 3),
+                params.get("direction", "down"),
+            )
+
+        elif action == "worker_move_cursor":
+            return worker_move_cursor(
+                params.get("x", 50),
+                params.get("y", 50),
+            )
+
+        elif action == "worker_hide_cursor":
+            return worker_hide_cursor()
+
         elif action == "generate_file":
             return {
                 **generate_file(
@@ -793,10 +1062,12 @@ async def main():
     port = parsed.port or 8765
 
     print(f"🔴 CursorEye Agent v{AGENT_VERSION}")
-    print(f"   Listening on ws://{host}:{port}")
+    print(f" Listening on ws://{host}:{port}")
     print(f" Capabilities: screenshot, ocr, click, double_click, right_click,")
     print(f" drag, scroll, type, shortcut, open_worker, worker_type,")
     print(f" worker_run, worker_run_wait, screenshot_worker, ocr_worker,")
+    print(f" worker_click, worker_double_click, worker_right_click,")
+    print(f" worker_drag, worker_scroll, worker_move_cursor, worker_hide_cursor,")
     print(f" generate_file, get_active_app, verify, open_app")
     print(f"   Press Ctrl+C to stop")
     print()

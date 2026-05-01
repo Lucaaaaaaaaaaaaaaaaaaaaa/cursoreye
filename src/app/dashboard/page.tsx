@@ -261,10 +261,25 @@ export default function Dashboard() {
         if (actionPlan.action === "screenshot_worker") {
           return { success: true, detail: `Worker window captured (${result.image_length} bytes)` };
         }
-        if (actionPlan.action === "worker_run_wait") {
-          return { success: true, detail: `Command output:\n${result.output?.slice(0, 500) || "(no output captured)"}` };
-        }
-        if (actionPlan.action === "get_active_app") {
+      if (actionPlan.action === "worker_run_wait") {
+        return { success: true, detail: `Command output:\n${result.output?.slice(0, 500) || "(no output captured)"}` };
+      }
+      if (actionPlan.action === "worker_click" || actionPlan.action === "worker_double_click" || actionPlan.action === "worker_right_click") {
+        return { success: result.success, detail: result.success ? `Purple cursor clicked at (${result.x_pct}%, ${result.y_pct}%)` : `Worker click failed: ${result.error}` };
+      }
+      if (actionPlan.action === "worker_drag") {
+        return { success: result.success, detail: result.success ? `Purple cursor dragged from (${result.x1_pct}%, ${result.y1_pct}%) to (${result.x2_pct}%, ${result.y2_pct}%)` : `Worker drag failed` };
+      }
+      if (actionPlan.action === "worker_scroll") {
+        return { success: result.success, detail: result.success ? `Scrolled ${result.amount}x ${result.direction} in worker window` : `Worker scroll failed` };
+      }
+      if (actionPlan.action === "worker_move_cursor") {
+        return { success: result.success, detail: result.success ? `Purple cursor moved to (${result.x_pct}%, ${result.y_pct}%)` : `Worker move cursor failed` };
+      }
+      if (actionPlan.action === "worker_hide_cursor") {
+        return { success: true, detail: "Purple cursor hidden" };
+      }
+      if (actionPlan.action === "get_active_app") {
           return { success: true, detail: `Active app: ${result.app}` };
         }
         return {
