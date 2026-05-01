@@ -371,16 +371,21 @@ def keyboard_shortcut(modifiers, key):
 
 
 def open_worker_window(title=None):
-    """Open a Terminal window with CursorEye Worker label."""
+    """Open a Terminal window with CursorEye Worker label and custom branding."""
     window_title = title or WORKER_WINDOW_TITLE
-    script = f'''
-    tell application "Terminal"
-        activate
-        set newTab to do script "echo '{window_title}' && echo '--- CursorEye Worker Ready ---' && echo 'AI can type and execute commands here.' && echo 'This is AI\\'s dedicated workspace — your game or other app stays in focus.' && echo '' && bash"
-        set custom title of front window to "{window_title}"
-    end tell
-    '''
-    result = subprocess.run(["osascript", "-e", script], capture_output=True, text=True)
+    scpt = tempfile.NamedTemporaryFile(suffix=".scpt", delete=False, mode="w")
+    scpt.write(f'''
+on run
+	tell application "Terminal"
+		activate
+		set workerWin to do script "printf '\\\\033]1337;SetColors=bg=#000000,fg=#d4b8ff\\\\007' && clear && echo '' && echo '  ██████╗██╗   ██╗██████╗ ███████╗██████╗ ███████╗██████╗ ██╗   ██╗███╗   ██╗██╗  ██╗' && echo ' ██╔════╝╚██╗ ██╔╝██╔══██╗██╔════╝██╔══██╗██╔════╝██╔══██╗██║   ██║████╗  ██║██║ ██╔╝' && echo ' ██║      ╚████╔╝ ██████╔╝█████╗  ██████╔╝█████╗  ██║  ██║██║   ██║██╔██╗ ██║█████╔╝ ' && echo ' ██║       ╚██╔╝  ██╔══██╗██╔══╝  ██╔══██╗██╔══╝  ██║  ██║██║   ██║██║╚██╗██║██╔═██╗ ' && echo ' ╚██████╗   ██║   ██████╔╝███████╗██║  ██║███████╗██████╔╝╚██████╔╝██║ ╚████║██║  ██╗' && echo '  ╚═════╝   ╚═╝   ╚═════╝ ╚══════╝╚═╝  ╚═╝╚══════╝╚═════╝  ╚═════╝ ╚═╝  ╚═══╝╚═╝  ╚═╝' && echo '' && echo '  ────────────────────────────────────────' && echo '  AI Workspace • Autonomous Terminal' && echo '  ────────────────────────────────────────' && echo '' && bash"
+		set custom title of front window to "{window_title}"
+	end tell
+end run
+''')
+    scpt.close()
+    result = subprocess.run(["osascript", scpt.name], capture_output=True, text=True)
+    os.unlink(scpt.name)
     import time
 
     time.sleep(1.0)
@@ -388,32 +393,80 @@ def open_worker_window(title=None):
 
 
 def type_in_worker_window(text):
-    """Type text into the worker window by bringing it to front then typing."""
-    script = f"""
-    tell application "Terminal"
-        activate
-        set index of every window whose custom title contains "CursorEye Worker" to 1
+    """Type text directly into the Worker window via AppleScript keystroke.
+    This uses Accessibility API to target the specific window, so it does NOT
+    interfere with the user's keyboard input in other apps (e.g. games)."""
+    escaped = text.replace("\\", "\\\\").replace('"', '\\"').replace("'", "'\\''")
+    script = f'''
+    tell application "System Events"
+        set p to first process whose name is "Terminal"
+        set w to first window of p whose name contains "CursorEye Worker"
+        set focused of w to true
+        set index of w to 1
+        delay 0.1
+        keystroke "{escaped}"
     end tell
-    """
-    subprocess.run(["osascript", "-e", script], capture_output=True, text=True)
-    import time
-
-    time.sleep(0.3)
-    return keyboard_type(text)
+    '''
+    result = subprocess.run(["osascript", "-e", script], capture_output=True, text=True)
+    if result.returncode != 0:
+        return {
+            "success": False,
+            "error": f"AppleScript keystroke failed: {result.stderr[:200]}",
+        }
+    return {"success": True, "text": text}
 
 
 def run_in_worker_window(command):
     """Run a shell command in the worker window."""
-    escaped = command.replace('"', '\\"').replace("\\", "\\\\")
+    scpt = tempfile.NamedTemporaryFile(suffix=".scpt", delete=False, mode="w")
+    scpt.write(f'''
+on run
+	tell application "Terminal"
+		set index of every window whose custom title contains "CursorEye Worker" to 1
+		do script "{command}" in first tab of front window
+	end tell
+end run
+''')
+    scpt.close()
+    result = subprocess.run(["osascript", scpt.name], capture_output=True, text=True)
+    os.unlink(scpt.name)
+    return {"success": result.returncode == 0}
+
+
+def shortcut_in_worker_window(modifiers, key):
+    """Send keyboard shortcut directly to Worker window via AppleScript.
+    Uses Accessibility API — does NOT interfere with user's keyboard in other apps."""
+    mod_flags = []
+    for m in modifiers:
+        ml = m.lower()
+        if ml == "cmd":
+            mod_flags.append("command down")
+        elif ml == "shift":
+            mod_flags.append("shift down")
+        elif ml == "ctrl":
+            mod_flags.append("control down")
+        elif ml == "alt":
+            mod_flags.append("option down")
+    using_clause = ", ".join(mod_flags) if mod_flags else ""
+    using_str = f" using {{" + using_clause + "}}" if using_clause else ""
+    escaped_key = key.replace("\\", "\\\\").replace('"', '\\"')
     script = f'''
-    tell application "Terminal"
-        activate
-        set index of every window whose custom title contains "CursorEye Worker" to 1
-        do script "{escaped}" in first tab of front window
+    tell application "System Events"
+        set p to first process whose name is "Terminal"
+        set w to first window of p whose name contains "CursorEye Worker"
+        set focused of w to true
+        set index of w to 1
+        delay 0.1
+        keystroke "{escaped_key}"{using_str}
     end tell
     '''
     result = subprocess.run(["osascript", "-e", script], capture_output=True, text=True)
-    return {"success": result.returncode == 0}
+    if result.returncode != 0:
+        return {
+            "success": False,
+            "error": f"AppleScript shortcut failed: {result.stderr[:200]}",
+        }
+    return {"success": True, "shortcut": f"{'+'.join(modifiers)}+{key}"}
 
 
 def run_in_worker_and_wait(command, wait_seconds=3):
@@ -635,6 +688,14 @@ def execute_command(cmd):
             return {
                 **type_in_worker_window(params.get("text", "")),
                 "action": "worker_type",
+            }
+
+        elif action == "worker_shortcut":
+            return {
+                **shortcut_in_worker_window(
+                    params.get("modifiers", []), params.get("key", "")
+                ),
+                "action": "worker_shortcut",
             }
 
         elif action == "worker_run":

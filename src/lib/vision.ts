@@ -159,7 +159,8 @@ Screen summary: ${screenContext.description.slice(0, 500)}
 ### Worker Window (YOUR OWN COMPUTER — separate macOS Terminal window):
 The Worker window is YOUR dedicated workspace. It stays open even when the user is in a game or another app.
 - **open_worker**: Open your dedicated worker Terminal window. Params: {title: "optional custom title"}
-- **worker_type**: Type text into your worker window. Params: {text}
+- **worker_type**: Type text into your worker window (does NOT interfere with user's keyboard). Params: {text}
+- **worker_shortcut**: Send keyboard shortcut to your worker window (does NOT interfere with user's keyboard). Params: {modifiers: ["cmd"], key: "c"}
 - **worker_run**: Execute a shell command in your worker window. Params: {command: "ls -la"}
 - **worker_run_wait**: Execute a shell command, wait for output, then OCR your window to read the result. Params: {command: "ls -la", wait_seconds: 3}
 - **screenshot_worker**: See what's in your worker window right now (screenshot)
