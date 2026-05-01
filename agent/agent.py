@@ -12,8 +12,9 @@ import sys
 import tempfile
 import websockets
 
-AGENT_VERSION = "1.0.0"
+AGENT_VERSION = "2.0.0"
 DEFAULT_WS_URL = "ws://localhost:8765"
+WORKER_WINDOW_TITLE = "🔴 CursorEye Worker"
 
 # ─── Screenshot ───────────────────────────────────────────────────────────
 
@@ -45,6 +46,11 @@ def take_screenshot(region=None):
 def ocr_screen(region=None):
     """Screenshot + OCR, return extracted text with bounding boxes."""
     img_b64 = take_screenshot(region)
+    return _ocr_from_base64(img_b64)
+
+
+def _ocr_from_base64(img_b64):
+    """Run OCR on a base64 PNG image."""
     swift_script = (
         """
 import Vision
@@ -52,9 +58,9 @@ import AppKit
 import Foundation
 
 guard let url = URL(string: "data:image/png;base64,%s"),
-      let data = try? Data(contentsOf url),
-      let image = NSImage(data: data),
-      let cgImage = image.cgImage(forProposedRect: nil, context: nil, hints: nil)
+    let data = try? Data(contentsOf url),
+    let image = NSImage(data: data),
+    let cgImage = image.cgImage(forProposedRect: nil, context: nil, hints: nil)
 else { print("[]"); exit(0) }
 
 let request = VNRecognizeTextRequest { req, error in
@@ -96,6 +102,72 @@ try? handler.perform([request])
         }
     except json.JSONDecodeError:
         return {"text_blocks": [], "image": img_b64, "raw_ocr": result.stdout[:500]}
+
+
+# ─── Worker Window Capture (AI's own "computer") ──────────────────────────
+
+
+def get_worker_window_bounds():
+    """Get the bounds of the CursorEye Worker terminal window via AppleScript."""
+    script = f"""
+    tell application "System Events"
+        set p to first process whose name is "Terminal"
+        set w to first window of p whose name contains "CursorEye Worker"
+        set pos to position of w
+        set sz to size of w
+        return (item 1 of pos) & "," & (item 2 of pos) & "," & (item 1 of sz) & "," & (item 2 of sz)
+    end tell
+    """
+    result = subprocess.run(["osascript", "-e", script], capture_output=True, text=True)
+    if result.returncode != 0:
+        return None
+    try:
+        parts = result.stdout.strip().split(", ")
+        return {
+            "x": int(parts[0]),
+            "y": int(parts[1]),
+            "w": int(parts[2]),
+            "h": int(parts[3]),
+        }
+    except (ValueError, IndexError):
+        return None
+
+
+def screenshot_worker():
+    """Screenshot the Worker window only — AI's own screen."""
+    bounds = get_worker_window_bounds()
+    if not bounds:
+        return {
+            "success": False,
+            "error": "Worker window not found. Open it first with open_worker.",
+        }
+    img_b64 = take_screenshot(bounds)
+    return {
+        "success": True,
+        "action": "screenshot_worker",
+        "image": img_b64[:100] + "...",
+        "image_length": len(img_b64),
+        "window_bounds": bounds,
+    }
+
+
+def ocr_worker():
+    """OCR the Worker window only — AI can read its own workspace."""
+    bounds = get_worker_window_bounds()
+    if not bounds:
+        return {
+            "success": False,
+            "error": "Worker window not found. Open it first with open_worker.",
+        }
+    img_b64 = take_screenshot(bounds)
+    ocr_result = _ocr_from_base64(img_b64)
+    texts = [b["text"] for b in ocr_result.get("text_blocks", [])]
+    return {
+        "success": True,
+        "action": "ocr_worker",
+        "text": "\n".join(texts),
+        "blocks": len(texts),
+    }
 
 
 # ─── Mouse Control via Quartz ──────────────────────────────────────────────
@@ -300,26 +372,29 @@ def keyboard_shortcut(modifiers, key):
 
 def open_worker_window(title=None):
     """Open a Terminal window with CursorEye Worker label."""
-    window_title = title or "🔴 CursorEye Worker"
+    window_title = title or WORKER_WINDOW_TITLE
     script = f'''
-tell application "Terminal"
-    activate
-    set newTab to do script "echo '{window_title}' && echo '--- CursorEye Worker Ready ---' && echo 'AI can type and execute commands here.' && echo '' && bash"
-    set custom title of front window to "{window_title}"
-end tell
-'''
+    tell application "Terminal"
+        activate
+        set newTab to do script "echo '{window_title}' && echo '--- CursorEye Worker Ready ---' && echo 'AI can type and execute commands here.' && echo 'This is AI\\'s dedicated workspace — your game or other app stays in focus.' && echo '' && bash"
+        set custom title of front window to "{window_title}"
+    end tell
+    '''
     result = subprocess.run(["osascript", "-e", script], capture_output=True, text=True)
+    import time
+
+    time.sleep(1.0)
     return {"success": result.returncode == 0, "window_title": window_title}
 
 
 def type_in_worker_window(text):
     """Type text into the worker window by bringing it to front then typing."""
     script = f"""
-tell application "Terminal"
-    activate
-    set index of every window whose custom title contains "CursorEye Worker" to 1
-end tell
-"""
+    tell application "Terminal"
+        activate
+        set index of every window whose custom title contains "CursorEye Worker" to 1
+    end tell
+    """
     subprocess.run(["osascript", "-e", script], capture_output=True, text=True)
     import time
 
@@ -329,15 +404,34 @@ end tell
 
 def run_in_worker_window(command):
     """Run a shell command in the worker window."""
+    escaped = command.replace('"', '\\"').replace("\\", "\\\\")
     script = f'''
-tell application "Terminal"
-    activate
-    set index of every window whose custom title contains "CursorEye Worker" to 1
-    do script "{command}" in first tab of front window
-end tell
-'''
+    tell application "Terminal"
+        activate
+        set index of every window whose custom title contains "CursorEye Worker" to 1
+        do script "{escaped}" in first tab of front window
+    end tell
+    '''
     result = subprocess.run(["osascript", "-e", script], capture_output=True, text=True)
     return {"success": result.returncode == 0}
+
+
+def run_in_worker_and_wait(command, wait_seconds=3):
+    """Run a shell command in the worker window, wait, then OCR the output."""
+    run_result = run_in_worker_window(command)
+    if not run_result["success"]:
+        return {"success": False, "error": "Failed to run command in worker window"}
+    import time
+
+    time.sleep(wait_seconds)
+    ocr_result = ocr_worker()
+    return {
+        "success": True,
+        "action": "worker_run_wait",
+        "command": command,
+        "output": ocr_result.get("text", ""),
+        "ocr_blocks": ocr_result.get("blocks", 0),
+    }
 
 
 # ─── File Generation ────────────────────────────────────────────────────────
@@ -549,6 +643,18 @@ def execute_command(cmd):
                 "action": "worker_run",
             }
 
+        elif action == "worker_run_wait":
+            return run_in_worker_and_wait(
+                params.get("command", ""),
+                params.get("wait_seconds", 3),
+            )
+
+        elif action == "screenshot_worker":
+            return screenshot_worker()
+
+        elif action == "ocr_worker":
+            return ocr_worker()
+
         elif action == "generate_file":
             return {
                 **generate_file(
@@ -627,11 +733,10 @@ async def main():
 
     print(f"🔴 CursorEye Agent v{AGENT_VERSION}")
     print(f"   Listening on ws://{host}:{port}")
-    print(f"   Capabilities: screenshot, ocr, click, double_click, right_click,")
-    print(f"                 drag, scroll, type, shortcut, open_worker, worker_type,")
-    print(
-        f"                 worker_run, generate_file, get_active_app, verify, open_app"
-    )
+    print(f" Capabilities: screenshot, ocr, click, double_click, right_click,")
+    print(f" drag, scroll, type, shortcut, open_worker, worker_type,")
+    print(f" worker_run, worker_run_wait, screenshot_worker, ocr_worker,")
+    print(f" generate_file, get_active_app, verify, open_app")
     print(f"   Press Ctrl+C to stop")
     print()
 

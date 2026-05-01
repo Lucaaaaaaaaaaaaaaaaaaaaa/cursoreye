@@ -255,6 +255,15 @@ export default function Dashboard() {
         if (actionPlan.action === "ocr") {
           return { success: true, detail: result.text?.slice(0, 500) || "(no text found)" };
         }
+        if (actionPlan.action === "ocr_worker") {
+          return { success: true, detail: `Worker window text:\n${result.text?.slice(0, 500) || "(empty)"}` };
+        }
+        if (actionPlan.action === "screenshot_worker") {
+          return { success: true, detail: `Worker window captured (${result.image_length} bytes)` };
+        }
+        if (actionPlan.action === "worker_run_wait") {
+          return { success: true, detail: `Command output:\n${result.output?.slice(0, 500) || "(no output captured)"}` };
+        }
         if (actionPlan.action === "get_active_app") {
           return { success: true, detail: `Active app: ${result.app}` };
         }
@@ -565,10 +574,20 @@ export default function Dashboard() {
                 <div className="aspect-video rounded-lg bg-[var(--bg-primary)] border border-[var(--border)] flex items-center justify-center">
                   <div className="text-center">
                     <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="var(--text-secondary)" strokeWidth="1" className="mx-auto mb-2 opacity-30"><rect x="2" y="3" width="20" height="14" rx="2" /><line x1="8" y1="21" x2="16" y2="21" /><line x1="12" y1="17" x2="12" y2="21" /></svg>
-                    <p className="text-[var(--text-secondary)] text-[10px]">Agent offline</p>
-                  </div>
-                </div>
-                <div>
+          <p className="text-[var(--text-secondary)] text-[10px]">Agent offline</p>
+          </div>
+        </div>
+        <button
+          onClick={() => {
+            const cmd = 'bash /Users/tony/Desktop/LUCAAA/cursoreye/agent/start.sh';
+            navigator.clipboard.writeText(cmd);
+            alert(`1. Open Terminal (Cmd+Space → Terminal)\n2. Paste and run:\n\n   ${cmd}\n\nThis opens the Agent + Worker windows automatically.`);
+          }}
+          className="w-full px-3 py-2 rounded-lg bg-[#6c5ce7]/20 border border-[#6c5ce7]/30 text-[#6c5ce7] text-xs font-medium hover:bg-[#6c5ce7]/30 transition-colors"
+        >
+          Start Agent (copy command)
+        </button>
+        <div>
                   <label className="text-[10px] text-[var(--text-secondary)] mb-1 block">Agent WebSocket URL</label>
                   <input
                     type="text"
