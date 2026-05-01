@@ -79,3 +79,8 @@ body {
 .screen-glow {
   box-shadow: 0 0 80px rgba(108, 92, 231, 0.2), inset 0 0 80px rgba(108, 92, 231, 0.05);
 }
+
+@keyframes slideUp {
+  from { transform: translateY(20px); opacity: 0; }
+  to { transform: translateY(0); opacity: 1; }
+}

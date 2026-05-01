@@ -1,7 +1,17 @@
-export const NVIDIA_API_KEY = process.env.NVIDIA_API_KEY || "";
-export const NVIDIA_VISION_MODEL = process.env.NVIDIA_VISION_MODEL || "meta/llama-3.2-90b-vision-instruct";
-export const NVIDIA_BASE_URL = "https://integrate.api.nvidia.com/v1/chat/completions";
-export const HTTP_PROXY = process.env.HTTP_PROXY || "http://127.0.0.1:3213";
+import { HttpsProxyAgent } from "https-proxy-agent";
+
+export const HTTP_PROXY = process.env.HTTP_PROXY || "";
+
+let proxyAgent: HttpsProxyAgent<string> | undefined;
+try {
+  if (HTTP_PROXY) proxyAgent = new HttpsProxyAgent(HTTP_PROXY);
+} catch {}
+
+function fetchOptions(extra: Record<string, unknown> = {}): Record<string, unknown> {
+  const opts: Record<string, unknown> = { ...extra };
+  if (proxyAgent) opts.agent = proxyAgent;
+  return opts;
+}
 
 export interface VisionResult {
   description: string;
@@ -16,9 +26,28 @@ export interface ChatResponse {
   suggestedActions?: string[];
   needsAction: boolean;
   actionPlan?: { action: string; params: Record<string, any> };
+  fileDownload?: { url: string; filename: string };
 }
 
-export async function analyzeScreen(imageBase64: string, prompt?: string): Promise<VisionResult> {
+export interface AIConfig {
+  apiKey: string;
+  model: string;
+  baseUrl: string;
+}
+
+function resolveConfig(partial?: Partial<AIConfig>): AIConfig {
+  const input = partial || {};
+  return {
+    apiKey: input.apiKey || process.env.NVIDIA_API_KEY || "",
+    model: input.model || process.env.NVIDIA_VISION_MODEL || "meta/llama-3.2-90b-vision-instruct",
+    baseUrl: input.baseUrl || "https://integrate.api.nvidia.com/v1/chat/completions",
+  };
+}
+
+export async function analyzeScreen(imageBase64: string, prompt?: string, config?: Partial<AIConfig>): Promise<VisionResult> {
+  const cfg = resolveConfig(config);
+  if (!cfg.apiKey) return { description: "", detectedApp: null, elements: [], suggestedActions: [], error: "API key not configured. Go to Settings to add your key." };
+
   const systemPrompt = `You are CursorEye, an AI that watches the user's screen and helps when asked. Given a screenshot:
 1. Identify what app is currently active (name only: e.g. "Figma", "Chrome", "Terminal", "VS Code")
 2. Describe what's on screen briefly
@@ -38,7 +67,7 @@ IMPORTANT: bounds are percentages of screen (0-100). x,y is top-left corner. Thi
   const userPrompt = prompt || "Analyze this screen. What app is active? What can I help with?";
 
   const payload = {
-    model: NVIDIA_VISION_MODEL,
+    model: cfg.model,
     messages: [
       { role: "system", content: systemPrompt },
       {
@@ -56,15 +85,15 @@ IMPORTANT: bounds are percentages of screen (0-100). x,y is top-left corner. Thi
   };
 
   try {
-    const response = await fetch(NVIDIA_BASE_URL, {
+    const response = await fetch(cfg.baseUrl, fetchOptions({
       method: "POST",
       headers: {
-        Authorization: `Bearer ${NVIDIA_API_KEY}`,
+        Authorization: `Bearer ${cfg.apiKey}`,
         "Content-Type": "application/json",
         Accept: "application/json",
       },
       body: JSON.stringify(payload),
-    });
+    }));
 
     if (!response.ok) {
       const errText = await response.text();
@@ -88,8 +117,12 @@ IMPORTANT: bounds are percentages of screen (0-100). x,y is top-left corner. Thi
 export async function generateChatResponse(
   screenContext: VisionResult,
   userMessage: string,
-  conversationHistory: { role: string; content: string }[] = []
+  conversationHistory: { role: string; content: string }[] = [],
+  config?: Partial<AIConfig>
 ): Promise<ChatResponse> {
+  const cfg = resolveConfig(config);
+  if (!cfg.apiKey) return { message: "API key not configured. Go to Settings to add your key.", needsAction: false };
+
   const systemPrompt = `You are CursorEye — a helpful, friendly AI that can see the user's screen and act on their computer. Your personality:
 - You're like a smart colleague sitting next to them, not a robot
 - When the user opens an app, you casually mention you can help with it
@@ -97,21 +130,61 @@ export async function generateChatResponse(
 - You're concise — no walls of text
 - You suggest things naturally, like "I noticed you could also..." rather than "I recommend you should..."
 - If the user says do something, you do it fast and report back
+- After performing actions, you ALWAYS verify your work by taking a screenshot and OCR-ing it
 
 Current screen: ${screenContext.detectedApp ? `Active app: ${screenContext.detectedApp}` : "Unknown app"}
 Screen summary: ${screenContext.description.slice(0, 500)}
+
+## YOUR ABILITIES (via local Screen Agent):
+
+### Screen Perception:
+- **screenshot**: Take a screenshot. Params: {region: {x,y,w,h}} (optional crop, percentages)
+- **ocr**: Read all text on screen. Returns text + positions. Params: {region} (optional)
+- **verify**: Check if specific text appears on screen. Params: {target: "text to find", region}
+- **get_active_app**: Get name of currently active application
+
+### Mouse Control (coordinates are percentages 0-100):
+- **click**: Click at position. Params: {x, y, button: "left"|"right"|"center", count: 1}
+- **double_click**: Double click. Params: {x, y}
+- **right_click**: Right click. Params: {x, y}
+- **drag**: Drag from A to B. Params: {x1, y1, x2, y2, duration: 0.5}
+- **scroll**: Scroll at position. Params: {x, y, amount: 3, direction: "up"|"down"}
+
+### Keyboard Control:
+- **type**: Type text character by character. Params: {text: "hello world"}
+- **shortcut**: Press keyboard shortcut. Params: {modifiers: ["cmd","shift"], key: "s"}
+
+### Worker Window (separate OS window, labeled "🔴 CursorEye Worker"):
+- **open_worker**: Open a dedicated worker Terminal window (works even when game is in focus). Params: {title: "optional custom title"}
+- **worker_type**: Type text into the worker window. Params: {text}
+- **worker_run**: Execute a shell command in the worker window. Params: {command: "ls -la"}
+
+### File Generation (creates actual downloadable files, NOT just text in chat):
+- **generate_file**: Create a real file on Desktop. Params: {file_type: "docx"|"pdf"|"txt"|"md"|"html"|"csv", content: "file content here", filename: "optional name.docx"}
+  - For docx: use markdown-ish formatting (# Heading, ## Sub, etc.)
+  - For csv: provide comma-separated data
+  - IMPORTANT: When user asks for a document, letter, or report, use generate_file — do NOT just put the text in chat
+
+### App Control:
+- **open_app**: Open an application by name. Params: {app: "Safari"}
+
+## IMPORTANT RULES:
+1. When user asks you to create a document/file → use generate_file, NOT just chat text
+2. After clicking/typing → use verify or ocr to confirm it worked
+3. Worker window is for long operations — use it when user is gaming or in another app
+4. Coordinates are ALWAYS percentages (0-100) of screen dimensions
+5. If unsure about screen state, take a screenshot or OCR first
 
 Respond in JSON:
 {
   "message": "your natural conversational response",
   "suggestedActions": ["optional", "quick", "actions"],
   "needsAction": true/false,
-  "actionPlan": {"action": "click|type|scroll|wait|done", "params": {"x":50,"y":30,"text":"optional"}} or null
+  "actionPlan": {"action": "one_of_the_actions_above", "params": {...}} or null
 }
 
 If the user is just chatting, needsAction = false and no actionPlan.
-If the user explicitly asks you to do something, needsAction = true with actionPlan.
-Action coordinates are percentages of screen (0-100).`;
+If the user explicitly asks you to do something, needsAction = true with actionPlan.`;
 
   const messages = [
     { role: "system", content: systemPrompt },
@@ -120,15 +193,20 @@ Action coordinates are percentages of screen (0-100).`;
   ];
 
   try {
-    const response = await fetch(NVIDIA_BASE_URL, {
+    const response = await fetch(cfg.baseUrl, fetchOptions({
       method: "POST",
       headers: {
-        Authorization: `Bearer ${NVIDIA_API_KEY}`,
+        Authorization: `Bearer ${cfg.apiKey}`,
         "Content-Type": "application/json",
         Accept: "application/json",
       },
-      body: JSON.stringify({ model: NVIDIA_VISION_MODEL, messages, max_tokens: 1024, temperature: 0.4, top_p: 0.9, stream: false }),
-    });
+      body: JSON.stringify({ model: cfg.model, messages, max_tokens: 1024, temperature: 0.4, top_p: 0.9, stream: false }),
+    }));
+
+    if (!response.ok) {
+      const errText = await response.text();
+      return { message: `API error ${response.status}: ${errText.slice(0, 100)}`, needsAction: false };
+    }
 
     const data = await response.json();
     const content = data.choices?.[0]?.message?.content || "";
@@ -144,9 +222,12 @@ Action coordinates are percentages of screen (0-100).`;
   }
 }
 
-export async function decideAction(screenContext: VisionResult, userGoal: string): Promise<{ action: string; params: Record<string, any>; reasoning: string }> {
+export async function decideAction(screenContext: VisionResult, userGoal: string, config?: Partial<AIConfig>): Promise<{ action: string; params: Record<string, any>; reasoning: string }> {
+  const cfg = resolveConfig(config);
+  if (!cfg.apiKey) return { action: "wait", params: {}, reasoning: "API key not configured" };
+
   const payload = {
-    model: NVIDIA_VISION_MODEL,
+    model: cfg.model,
     messages: [
       {
         role: "system",
@@ -167,15 +248,20 @@ Return JSON: {"action":"click|type|scroll|wait|done","params":{"x":50,"y":30,"te
   };
 
   try {
-    const response = await fetch(NVIDIA_BASE_URL, {
+    const response = await fetch(cfg.baseUrl, fetchOptions({
       method: "POST",
       headers: {
-        Authorization: `Bearer ${NVIDIA_API_KEY}`,
+        Authorization: `Bearer ${cfg.apiKey}`,
         "Content-Type": "application/json",
         Accept: "application/json",
       },
       body: JSON.stringify(payload),
-    });
+    }));
+
+    if (!response.ok) {
+      const errText = await response.text();
+      return { action: "wait", params: {}, reasoning: `API error ${response.status}: ${errText.slice(0, 100)}` };
+    }
 
     const data = await response.json();
     const content = data.choices?.[0]?.message?.content || "";

@@ -1,3 +1,5 @@
+import LiveCounter from "@/components/LiveCounter";
+
 export default function Home() {
   return (
     <div className="flex flex-col min-h-screen">
@@ -27,10 +29,7 @@ export default function Home() {
       <section className="relative pt-32 pb-20 px-6 overflow-hidden">
         <div className="absolute top-0 left-1/2 -translate-x-1/2 w-[800px] h-[800px] rounded-full bg-[#6c5ce7]/5 blur-[120px] pointer-events-none" />
         <div className="max-w-5xl mx-auto text-center relative">
-          <div className="inline-flex items-center gap-2 px-4 py-1.5 rounded-full bg-[var(--bg-card)] border border-[var(--border)] text-sm text-[var(--text-secondary)] mb-8">
-            <span className="w-2 h-2 rounded-full bg-[var(--success)] pulse-dot" />
-            AI is watching 2,847 screens right now
-          </div>
+      <LiveCounter />
 
           <h1 className="text-5xl sm:text-7xl font-bold tracking-tight leading-[1.1] mb-6">
             Your AI has
